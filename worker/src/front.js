@@ -29,10 +29,11 @@ function fail(err) {
  * @param opts.registry (body) => Promise<{ ok, data | error }>
  * @param opts.region (name, body, who) => Promise<{ ok, data | error }>
  * @param opts.now () => 毫秒
+ * @param opts.fentan (year) => Promise<分壇行事曆那一年的活動（公開的 getEvents.events）>
  */
 export function createFront(opts) {
   const now = opts.now || (() => Date.now());
-  const ttl = Object.assign({ regions: 60e3, events: 30e3, feed: 120e3, verify: 60e3 }, opts.ttl || {});
+  const ttl = Object.assign({ regions: 60e3, events: 30e3, feed: 120e3, verify: 60e3, fentan: 120e3 }, opts.ttl || {});
   const cache = new Map(); // key → { at, data }
 
   const unwrap = (res) => {
@@ -50,6 +51,34 @@ export function createFront(opts) {
   }
   const forget = (prefix) => { [...cache.keys()].forEach((k) => { if (k.startsWith(prefix)) cache.delete(k); }); };
 
+  // ---------- 分壇分配的勤務（規格第 5-1 節）：讀分壇行事曆，依年份快取 2 分鐘 ----------
+  const DEFAULT_POSITION = [{ id: 'P-fentan-join', name: '參加', min: 0, max: null }];
+  const fentanYear = (y) => cached('fentan:' + y, ttl.fentan, async () => (await opts.fentan(y)) || []).catch((err) => {
+    console.warn('分壇行事曆讀不到', y, String(err && err.message));
+    return [];
+  });
+
+  /** 分壇派給這一區的勤務（分壇分配），轉成本系統的活動格式（代號前面加 F-） */
+  async function assigned(region, years) {
+    const lists = await Promise.all(years.map(fentanYear));
+    const seen = new Set();
+    const out = [];
+    lists.forEach((list) => list.forEach((e) => {
+      if (e.source !== 'local' || e.unit !== region || e.kind !== '分壇分配' || seen.has(e.id)) return;
+      seen.add(e.id);
+      out.push({
+        id: 'F-' + e.id, assigned: true, category: e.category, mode: '報名型', name: e.name,
+        start: e.start, end: e.end, startTime: e.startTime || '', endTime: e.endTime || '', location: e.location || '', note: e.note || '',
+        positions: Array.isArray(e.positions) && e.positions.length ? e.positions.map((p) => ({ id: p.id, name: p.name, min: p.min, max: p.max })) : DEFAULT_POSITION
+      });
+    }));
+    return out;
+  }
+
+  const yearOf = (d) => Number(d.slice(0, 4));
+  const yearsBetween = (from, to) => { const out = []; for (let y = yearOf(from); y <= yearOf(to); y++) out.push(y); return out; };
+  const aroundNow = () => { const y = Number(new Date(now() + 8 * 3600e3).toISOString().slice(0, 4)); return [y - 1, y, y + 1]; };
+
   const allRegions = () => cached('regions', ttl.regions, async () => unwrap(await opts.registry({ action: 'regions' })).regions);
   const publicRegions = async () => (await allRegions()).filter((r) => r.status === '開放' && r.name !== SITE.testRegion);
 
@@ -65,8 +94,11 @@ export function createFront(opts) {
     return cached('verify:' + token, ttl.verify, async () => unwrap(await opts.registry({ action: 'verify', token })));
   }
 
+  /** 轉給該區：一律附上分壇派給這一區的勤務（external），區的程式才知道分壇分配的活動 */
   async function regionCall(name, body, who) {
-    const data = unwrap(await opts.region(name, body, who));
+    const years = body.from && body.to ? yearsBetween(body.from, body.to) : aroundNow();
+    const withExt = Object.assign({}, body, { external: opts.fentan ? await assigned(name, years) : [] });
+    const data = unwrap(await opts.region(name, withExt, who));
     if (WRITES[body.action]) { forget('ev:' + name + ':'); forget('feed'); }
     return data;
   }
@@ -95,7 +127,7 @@ export function createFront(opts) {
       checkRange(from, to, 62);
       return cached(`feed:${from}:${to}:${test ? 1 : 0}`, ttl.feed, async () => {
         const regions = test ? await allRegions() : await publicRegions();
-        const parts = await Promise.all(regions.map((r) => opts.region(r.name, { action: 'feed', from, to }, null).then(unwrap)));
+        const parts = await Promise.all(regions.map((r) => regionCall(r.name, { action: 'feed', from, to }, null)));
         return { from, to, regions: parts };
       });
     }

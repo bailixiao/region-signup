@@ -7,8 +7,9 @@ import { createRegionApp } from '../worker/src/region-app.js';
 import { createMemoryStore } from '../worker/src/store.js';
 import { sameName, dayStatus, cleanEvent } from '../worker/src/logic.js';
 
-function setup() {
+function setup(fentanEvents) {
   let t = Date.parse('2026-10-13T02:00:00Z'); // 台北 10/13 10:00
+  const fentan = { list: fentanEvents || [] };
   const clock = { now: () => t, add: (ms) => { t += ms; } };
   const registry = createRegistryApp(createMemoryStore(), { superPassword: () => 'test-super', now: clock.now });
   const stores = new Map();
@@ -20,12 +21,13 @@ function setup() {
     registry: (b) => registry.call(JSON.parse(JSON.stringify(b))),
     region: (name, b, who) => regionApp(name).call(JSON.parse(JSON.stringify(b)), who),
     now: clock.now,
-    ttl: { regions: 0, events: 0, feed: 0, verify: 0 }
+    fentan: async (year) => fentan.list.filter((e) => e.start.slice(0, 4) === String(year)),
+    ttl: { regions: 0, events: 0, feed: 0, verify: 0, fentan: 0 }
   });
   const post = async (body) => (await front.handle(new Request('http://x/', { method: 'POST', body: JSON.stringify(body) }))).json();
   const get = async (q) => (await front.handle(new Request('http://x/?' + q))).json();
   const ok = (r) => { assert.equal(r.ok, true, JSON.stringify(r)); return r.data; };
-  return { clock, post, get, ok };
+  return { clock, post, get, ok, fentan };
 }
 
 /** 開好測試區與教真區，回傳兩個管理者的通行碼與一個活動 */
@@ -217,4 +219,52 @@ test('給分壇的 feed：只有開放的區（測試區不算），名單只有
   assert.equal(r.error.code, 'BAD_REQUEST');
   const bad = await env.post({ action: 'adminLogin', account: '不存在', password: 'x' });
   assert.equal(bad.error.message, '沒有這個帳號');
+});
+
+test('分壇分配的勤務：從分壇行事曆讀進來、只收報名、不能在這裡改（規格第 5-1 節）', async () => {
+  const F = (o) => Object.assign({ source: 'local', category: '勤務', start: '2026-10-24', end: '2026-10-24', startTime: '', endTime: '', location: '宏宗', note: '', positions: [] }, o);
+  const env = setup([
+    F({ id: 'E-1', unit: '測試區', kind: '分壇分配', name: '統班烹飪', positions: [{ id: 'P-a', name: '烹飪', min: 15, max: null }] }),
+    F({ id: 'E-2', unit: '測試區', kind: '分壇分配', name: '宏宗獻供拜香' }),
+    F({ id: 'E-3', unit: '測試區', kind: '區活動', name: '研究班（範例）' }),
+    F({ id: 'E-4', unit: '教真區', kind: '分壇分配', name: '別區的勤務' }),
+    F({ id: 'E-5', unit: '分壇', kind: '', name: '分壇法會' }),
+    F({ id: 'jq-D-1', source: 'jiaoquan', unit: '教全區', name: '教全區的' })
+  ]);
+  const { tok } = await ready(env);
+  let evs = env.ok(await env.get('action=getEvents&region=測試區&from=2026-10-01&to=2026-10-31')).events;
+  const names = evs.map((e) => e.name);
+  assert.ok(names.includes('統班烹飪') && names.includes('宏宗獻供拜香') && names.includes('宏宗打掃'));
+  assert.ok(!names.includes('研究班（範例）') && !names.includes('別區的勤務') && !names.includes('分壇法會') && !names.includes('教全區的'));
+  const cook = evs.find((e) => e.name === '統班烹飪');
+  assert.equal(cook.id, 'F-E-1');
+  assert.equal(cook.assigned, true);
+  assert.deepEqual(cook.days['2026-10-24'].status, { kind: 'short', label: '缺 15 人' });
+  const incense = evs.find((e) => e.name === '宏宗獻供拜香');
+  assert.deepEqual(incense.positions, [{ id: 'P-fentan-join', name: '參加', min: 0, max: null }]);
+  assert.deepEqual(incense.days['2026-10-24'].status, { kind: 'ok', label: '已報 0 人' }); // 不限人數、不算缺人
+  // 家人報名分壇分配的勤務
+  env.ok(await env.post({ action: 'signup', region: '測試區', eventId: 'F-E-1', dates: ['2026-10-24'], positionId: 'P-a', names: ['王小明', '測試甲'] }));
+  const one = env.ok(await env.get('action=getEvent&region=測試區&id=F-E-1'));
+  assert.deepEqual(one.days[0].positions[0].people, [{ name: '王小明' }, { name: '測試甲' }]);
+  const mine = env.ok(await env.post({ action: 'mySignups', region: '測試區', name: '王小明' })).items;
+  assert.equal(mine[0].eventName, '統班烹飪');
+  // 分壇的 feed 讀得到（test=1）
+  const f = env.ok(await env.get('action=feed&from=2026-10-13&to=2026-11-12&test=1'));
+  const t = f.regions.find((r) => r.region === '測試區');
+  assert.ok(t.events.some((e) => e.id === 'F-E-1' && e.days[0].positions[0].people.length === 2));
+  // 區管理者不能改、不能刪；列表看得到（標分壇分配）
+  let r = await env.post({ action: 'adminSaveEvent', token: tok, region: '測試區', event: Object.assign({}, cook, { name: '改名' }) });
+  assert.equal(r.error.code, 'FORBIDDEN');
+  r = await env.post({ action: 'adminDeleteEvent', token: tok, region: '測試區', id: 'F-E-1' });
+  assert.equal(r.error.code, 'FORBIDDEN');
+  const list = env.ok(await env.post({ action: 'adminEvents', token: tok, region: '測試區' })).events;
+  assert.equal(list.find((e) => e.id === 'F-E-1').assigned, true);
+  assert.equal(list.find((e) => e.id === 'F-E-1').signups, 2);
+  // 分壇刪掉了：不再顯示，但報名還能取消
+  env.fentan.list = env.fentan.list.filter((e) => e.id !== 'E-1');
+  evs = env.ok(await env.get('action=getEvents&region=測試區&from=2026-10-01&to=2026-10-31')).events;
+  assert.ok(!evs.some((e) => e.id === 'F-E-1'));
+  r = await env.post({ action: 'cancel', region: '測試區', signupId: mine[0].id });
+  assert.equal(r.ok, true, JSON.stringify(r));
 });

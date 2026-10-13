@@ -7,6 +7,8 @@ export const SITE = {
   testRegion: '測試區', // 給管理者試用，家人看不到、分壇不讀
   superAccount: '分壇總管理者',
   categories: ['勤務', '道務', '教育'],
+  // 分壇行事曆：分壇分配的勤務從這裡讀（規格第 5-1 節）
+  fentanApi: 'https://fentan-calendar-api.duty-calendar-worker.workers.dev/',
   modes: ['報名型', '公告型']
 };
 

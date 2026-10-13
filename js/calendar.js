@@ -333,7 +333,7 @@
     return `
       <a class="ev-card cat-line-${Fmt.esc(ev.category)}${compact ? ' is-compact' : ''}" href="#/r/${encodeURIComponent(state.region)}/e/${encodeURIComponent(ev.id)}?date=${date}">
         <span class="card-main">
-          <span class="tags"><span class="cat-tag cat-${Fmt.esc(ev.category)}">${Fmt.esc(Fmt.catLabel(ev.category))}</span></span>
+          <span class="tags">${ev.assigned ? '<span class="unit-tag is-fentan">分壇分配</span>' : ''}<span class="cat-tag cat-${Fmt.esc(ev.category)}">${Fmt.esc(Fmt.catLabel(ev.category))}</span></span>
           <span class="card-title">${Fmt.esc(ev.name)}</span>
           ${meta.length ? `<span class="card-meta">${meta.map(Fmt.esc).join('・')}</span>` : ''}
         </span>

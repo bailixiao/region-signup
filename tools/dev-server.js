@@ -25,7 +25,18 @@ async function startMock() {
   const registry = createRegistryApp(createMemoryStore(), { superPassword: () => 'test-super' });
   const regions = new Map();
   const region = (name) => { if (!regions.has(name)) regions.set(name, createRegionApp(createMemoryStore(), { region: name })); return regions.get(name); };
-  front = createFront({ registry: (b) => registry.call(b), region: (name, b, who) => region(name).call(b, who), ttl: { regions: 0, events: 0, feed: 0, verify: 0 } });
+  // 假的分壇行事曆：派給測試區的勤務（分壇分配）
+  const fentanFake = [
+    { id: 'E-demo1', source: 'local', unit: '測試區', kind: '分壇分配', category: '勤務', name: '統班烹飪（範例）', start: day(11), end: day(11), startTime: '07:00', endTime: '', location: '彌勒山', note: '每區 15 位，煮 150 人以上用餐。', positions: [{ id: 'P-cook', name: '烹飪', min: 15, max: null }] },
+    { id: 'E-demo2', source: 'local', unit: '測試區', kind: '分壇分配', category: '道務', name: '宏宗獻供拜香（範例）', start: day(4), end: day(4), startTime: '', endTime: '', location: '宏宗', note: '', positions: [] },
+    { id: 'E-demo3', source: 'local', unit: '測試區', kind: '區活動', category: '道務', name: '這筆不會出現（區活動）', start: day(4), end: day(4), startTime: '', endTime: '', location: '', note: '', positions: [] }
+  ];
+  front = createFront({
+    registry: (b) => registry.call(b),
+    region: (name, b, who) => region(name).call(b, who),
+    fentan: async (year) => fentanFake.filter((e) => e.start.slice(0, 4) === String(year)),
+    ttl: { regions: 0, events: 0, feed: 0, verify: 0, fentan: 0 }
+  });
 
   // 示範資料
   const post = async (body) => (await front.handle(new Request('http://x/', { method: 'POST', body: JSON.stringify(body) }))).json();

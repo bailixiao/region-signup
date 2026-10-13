@@ -1,5 +1,6 @@
 // 每區一個 Durable Object 裡跑的部分：活動、報名、取消、改期、名單、操作紀錄（規格第 5、6 節）。
 // call(body, who)：who＝null（家人）或 { role: 'super'|'region', region }（已由 registry 驗證過的管理者）。
+// body.external：前門附上的「分壇分配」勤務（從分壇行事曆讀來，代號 F- 開頭，規格第 5-1 節）：只收報名，不能在這裡改內容。
 import {
   AppError, cleanEvent, cleanName, dayCounts, dayStatus, datesBetween, sameName, str, taipeiDate, taipeiStamp, MAX_NAMES
 } from './logic.js';
@@ -31,6 +32,16 @@ export function createRegionApp(store, opts) {
     return ev;
   }
   const signupsOf = (evId) => store.byK('signups', evId);
+  const isAssigned = (id) => typeof id === 'string' && id.indexOf('F-') === 0;
+
+  /** 區活動從資料庫找；分壇分配的從前門附上的 external 找 */
+  function getEventAny(id, body) {
+    if (!isAssigned(id)) return getEvent(id);
+    const ev = (body && Array.isArray(body.external) ? body.external : []).find((x) => x.id === id);
+    if (!ev) throw new AppError('NOT_FOUND', '找不到這個活動，可能分壇已經刪除或改了');
+    return ev;
+  }
+  const allEvents = (body) => store.all('events').concat(body && Array.isArray(body.external) ? body.external : []);
   const valid = (list) => list.filter((s) => s.status === '有效');
 
   /** 操作紀錄：id 是序號（排序＝先後順序）；超過 LOG_KEEP＋200 筆時刪掉最舊的 200 筆 */
@@ -55,11 +66,11 @@ export function createRegionApp(store, opts) {
 
   function publicEvent(ev) {
     const { id, category, mode, name, start, end, startTime, endTime, location, note } = ev;
-    return { id, category, mode, name, start, end, startTime, endTime, location, note, positions: ev.positions.map(({ id: pid, name: pn, min, max }) => ({ id: pid, name: pn, min, max })) };
+    return { id, assigned: isAssigned(id), category, mode, name, start, end, startTime, endTime, location, note, positions: ev.positions.map(({ id: pid, name: pn, min, max }) => ({ id: pid, name: pn, min, max })) };
   }
 
-  function inRange(from, to) {
-    return store.all('events').filter((e) => e.start <= to && e.end >= from)
+  function inRange(from, to, body) {
+    return allEvents(body).filter((e) => e.start <= to && e.end >= from)
       .sort((a, b) => a.start.localeCompare(b.start) || (a.startTime || '').localeCompare(b.startTime || '') || a.name.localeCompare(b.name));
   }
 
@@ -114,7 +125,7 @@ export function createRegionApp(store, opts) {
     events(body) {
       return {
         today: today(),
-        events: inRange(body.from, body.to).map((ev) => {
+        events: inRange(body.from, body.to, body).map((ev) => {
           const list = valid(signupsOf(ev.id));
           const days = {};
           datesBetween(ev.start > body.from ? ev.start : body.from, ev.end < body.to ? ev.end : body.to).forEach((d) => {
@@ -127,13 +138,13 @@ export function createRegionApp(store, opts) {
     },
 
     event(body) {
-      const ev = getEvent(body.id);
+      const ev = getEventAny(body.id, body);
       const list = signupsOf(ev.id);
       return { today: today(), event: publicEvent(ev), days: datesBetween(ev.start, ev.end).map((d) => dayView(ev, list, d, false)) };
     },
 
     signup(body, who) {
-      const ev = getEvent(body.eventId);
+      const ev = getEventAny(body.eventId, body);
       const c = checkSignup(ev, body.dates, body.positionId, body.names, who);
       if (c.problems.length && !who) throw new AppError('BLOCKED', '有人報不了，這次都沒有送出', c.problems);
       return { created: createSignups(ev, c, who), warnings: c.problems };
@@ -143,7 +154,7 @@ export function createRegionApp(store, opts) {
       const name = cleanName(body.name);
       if (!name) throw new AppError('BAD_REQUEST', '請填名字');
       const out = [];
-      store.all('events').forEach((ev) => {
+      allEvents(body).forEach((ev) => {
         valid(signupsOf(ev.id)).filter((s) => s.name === name && s.date >= today()).forEach((s) => {
           out.push({ id: s.id, date: s.date, eventId: ev.id, eventName: ev.name, positionId: s.positionId, position: (ev.positions.find((p) => p.id === s.positionId) || {}).name || '', startTime: ev.startTime, location: ev.location, canChange: s.date > today() });
         });
@@ -155,7 +166,8 @@ export function createRegionApp(store, opts) {
       const s = typeof body.signupId === 'string' ? store.get('signups', body.signupId) : null;
       if (!s || s.status !== '有效') throw new AppError('NOT_FOUND', '找不到這筆報名，可能已經取消了');
       if (!who && s.date <= today()) throw new AppError('TOO_LATE', '活動當天（含）之後不能自己取消，請聯絡區管理者');
-      const ev = getEvent(s.eventId);
+      let ev;
+      try { ev = getEventAny(s.eventId, body); } catch (e) { ev = { name: '（已刪除的活動）' }; } // 分壇刪掉的也能取消
       s.status = '已取消';
       s.canceledAt = taipeiStamp(now());
       store.put('signups', s.id, s, s.eventId);
@@ -167,7 +179,7 @@ export function createRegionApp(store, opts) {
       const s = typeof body.signupId === 'string' ? store.get('signups', body.signupId) : null;
       if (!s || s.status !== '有效') throw new AppError('NOT_FOUND', '找不到這筆報名，可能已經取消了');
       if (!who && s.date <= today()) throw new AppError('TOO_LATE', '活動當天（含）之後不能自己改期，請聯絡區管理者');
-      const ev = getEvent(s.eventId);
+      const ev = getEventAny(s.eventId, body);
       const positionId = typeof body.positionId === 'string' && body.positionId ? body.positionId : s.positionId;
       if (body.date === s.date && positionId === s.positionId) throw new AppError('BAD_REQUEST', '日期和了愿項目都沒有改');
       const c = checkSignup(ev, [body.date], positionId, [s.name], who, s.id);
@@ -190,7 +202,7 @@ export function createRegionApp(store, opts) {
     feed(body) {
       return {
         region,
-        events: inRange(body.from, body.to).map((ev) => {
+        events: inRange(body.from, body.to, body).map((ev) => {
           const list = signupsOf(ev.id);
           const days = datesBetween(ev.start > body.from ? ev.start : body.from, ev.end < body.to ? ev.end : body.to).map((d) => {
             const v = dayView(ev, list, d, false);
@@ -203,16 +215,17 @@ export function createRegionApp(store, opts) {
 
     // ---------- 區管理者 ----------
 
-    adminEvents() {
+    adminEvents(body) {
       return {
         today: today(),
-        events: store.all('events').sort((a, b) => a.start.localeCompare(b.start) || (a.startTime || '').localeCompare(b.startTime || ''))
+        events: allEvents(body).sort((a, b) => a.start.localeCompare(b.start) || (a.startTime || '').localeCompare(b.startTime || ''))
           .map((ev) => Object.assign(publicEvent(ev), { signups: valid(signupsOf(ev.id)).length, createdAt: ev.createdAt, updatedAt: ev.updatedAt }))
       };
     },
 
     adminSaveEvent(body, who) {
       const input = body.event || {};
+      if (isAssigned(input.id)) throw new AppError('FORBIDDEN', '分壇分配的勤務只能由分壇在分壇行事曆後台修改');
       const clean = cleanEvent(input, () => newId('P'));
       const stamp = taipeiStamp(now());
       if (input.id) {
@@ -238,6 +251,7 @@ export function createRegionApp(store, opts) {
     },
 
     adminDeleteEvent(body, who) {
+      if (isAssigned(body.id)) throw new AppError('FORBIDDEN', '分壇分配的勤務只能由分壇在分壇行事曆後台刪除');
       const ev = getEvent(body.id);
       if (valid(signupsOf(ev.id)).length) throw new AppError('BAD_REQUEST', '還有人報名，要先取消報名才能刪除');
       store.tx(() => {
@@ -249,7 +263,7 @@ export function createRegionApp(store, opts) {
     },
 
     adminRoster(body) {
-      const ev = getEvent(body.id);
+      const ev = getEventAny(body.id, body);
       const list = signupsOf(ev.id);
       return { today: today(), event: publicEvent(ev), days: datesBetween(ev.start, ev.end).map((d) => dayView(ev, list, d, true)) };
     },

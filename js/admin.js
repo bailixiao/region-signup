@@ -35,7 +35,7 @@
       <p class="muted admin-who">登入：${Fmt.esc(who.account)}</p>
       <nav class="admin-tabs">
         ${who.role === 'super' ? tab('#/admin/regions', '區', 'regions') : ''}
-        ${region ? tab(base, '活動', 'events') + tab(base + '/new', '＋ 新增活動', 'new') + tab(base + '/log', '操作紀錄', 'log') : ''}
+        ${region ? tab(base, '活動', 'events') + tab(base + '/new', '＋ 新增區活動', 'new') + tab(base + '/log', '操作紀錄', 'log') : ''}
       </nav>`;
   }
 
@@ -187,8 +187,9 @@
       const shown = list.filter((e) => (st.filterPast ? e.end < today : e.end >= today));
       if (st.filterPast) shown.reverse();
       view.innerHTML = head(region, 'events') + `
+        <p class="hint">「＋ 新增區活動」是<strong>區自己的活動</strong>。標「分壇分配」的是分壇派給本區的勤務，這裡只管報名（名單、幫人報名、取消、改期），內容由分壇在分壇行事曆修改。</p>
         <div class="admin-actions">
-          <a class="btn btn-primary" href="#/admin/r/${enc(region)}/new">＋ 新增活動</a>
+          <a class="btn btn-primary" href="#/admin/r/${enc(region)}/new">＋ 新增區活動</a>
           <a class="btn" href="#/r/${enc(region)}">看家人的畫面</a>
         </div>
         <div class="seg" role="group"><button type="button" data-past="0" class="${st.filterPast ? '' : 'is-active'}">今天起</button><button type="button" data-past="1" class="${st.filterPast ? 'is-active' : ''}">已過去的</button></div>
@@ -196,15 +197,15 @@
           <li class="admin-row">
             <div class="admin-row-main">
               <span class="admin-row-date">${Fmt.esc(e.start === e.end ? Fmt.shortDate(e.start) : Fmt.shortDate(e.start) + ' – ' + Fmt.shortDate(e.end))}</span>
-              <span class="tags"><span class="cat-tag cat-${Fmt.esc(e.category)}">${Fmt.esc(Fmt.catLabel(e.category))}</span>${e.mode === '公告型' ? '<span class="unit-tag">公告</span>' : ''}</span>
+              <span class="tags">${e.assigned ? '<span class="unit-tag is-fentan">分壇分配</span>' : ''}<span class="cat-tag cat-${Fmt.esc(e.category)}">${Fmt.esc(Fmt.catLabel(e.category))}</span>${e.mode === '公告型' ? '<span class="unit-tag">公告</span>' : ''}</span>
               <strong>${Fmt.esc(e.name)}</strong>
               <span class="card-meta">${Fmt.esc([Fmt.timeRange(e), e.location].filter(Boolean).join('・'))}${e.mode === '報名型' ? `　報名 ${e.signups} 筆` : ''}</span>
             </div>
             <div class="admin-row-actions">
               ${e.mode === '報名型' ? `<a class="btn btn-small" href="#/admin/r/${enc(region)}/roster/${enc(e.id)}">名單</a>` : ''}
-              <a class="btn btn-small" href="#/admin/r/${enc(region)}/edit/${enc(e.id)}">修改</a>
+              ${e.assigned ? '<span class="muted assigned-note">分壇在分壇行事曆修改</span>' : `<a class="btn btn-small" href="#/admin/r/${enc(region)}/edit/${enc(e.id)}">修改</a>
               <a class="btn btn-small" href="#/admin/r/${enc(region)}/copy/${enc(e.id)}">另存新的</a>
-              <button type="button" class="btn btn-small btn-quiet-danger" data-del="${Fmt.esc(e.id)}">刪除</button>
+              <button type="button" class="btn btn-small btn-quiet-danger" data-del="${Fmt.esc(e.id)}">刪除</button>`}
             </div>
           </li>`).join('')}</ul>` : `<p class="panel-empty">${st.filterPast ? '沒有已過去的活動' : '今天起沒有活動，按「＋ 新增活動」開始'}</p>`}`;
       bindHead();
@@ -235,7 +236,7 @@
   function renderForm(region, src, mode) {
     const ev = src ? JSON.parse(JSON.stringify(src)) : { category: '勤務', mode: '報名型', start: CalendarPage.today(), positions: [{ name: '', min: null, max: null }] };
     if (mode === 'copy') ev.positions = ev.positions.map((p) => ({ name: p.name, min: p.min, max: p.max }));
-    const title = mode === 'edit' ? '修改活動' : mode === 'copy' ? '另存成新的活動' : '新增活動';
+    const title = mode === 'edit' ? '修改區活動' : mode === 'copy' ? '另存成新的區活動' : '新增區活動';
     const opt = (list, v, label) => list.map((x) => `<option value="${Fmt.esc(x)}"${x === v ? ' selected' : ''}>${Fmt.esc(label ? label(x) : x)}</option>`).join('');
     const posRow = (p, i) => `
       <div class="pos-row" data-i="${i}">

@@ -29,7 +29,7 @@
     const time = ev.start === ev.end ? Fmt.timeRange(ev) : [ev.startTime ? `第一天 ${ev.startTime} 開始` : '', ev.endTime ? `最後一天 ${ev.endTime} 結束` : ''].filter(Boolean).join('，');
     return `
       <div class="detail-head">
-        <span class="tags"><span class="cat-tag cat-${Fmt.esc(ev.category)}">${Fmt.esc(Fmt.catLabel(ev.category))}</span>${ev.mode === '公告型' ? '<span class="unit-tag">公告</span>' : ''}</span>
+        <span class="tags">${ev.assigned ? '<span class="unit-tag is-fentan">分壇分配</span>' : ''}<span class="cat-tag cat-${Fmt.esc(ev.category)}">${Fmt.esc(Fmt.catLabel(ev.category))}</span>${ev.mode === '公告型' ? '<span class="unit-tag">公告</span>' : ''}</span>
         <h1 class="detail-title">${Fmt.esc(ev.name)}</h1>
       </div>
       <dl class="detail-info">
@@ -37,6 +37,7 @@
         ${time ? `<div><dt>時間</dt><dd>${Fmt.esc(time)}</dd></div>` : ''}
         ${ev.location ? `<div><dt>地點</dt><dd>${Fmt.esc(ev.location)}</dd></div>` : ''}
       </dl>
+      ${ev.assigned ? '<p class="hint">這是宏教分壇分配給本區的勤務，內容由分壇安排；報名後分壇就看得到名單。</p>' : ''}
       ${ev.note ? `<section class="detail-section"><h2>說明</h2><p class="detail-desc">${Fmt.esc(ev.note).replace(/\n/g, '<br>')}</p></section>` : ''}
       ${ev.mode === '報名型' ? `<section class="detail-section"><h2>報名名單</h2>${day ? rosterBlock(day) : ''}
         ${others.length ? `<details class="roster-more"><summary>其他 ${others.length} 天的名單</summary>${others.map(rosterBlock).join('')}</details>` : ''}</section>` : ''}`;

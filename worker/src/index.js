@@ -7,6 +7,7 @@ import { createFront } from './front.js';
 import { createRegistryApp } from './registry-app.js';
 import { createRegionApp } from './region-app.js';
 import { createSqlStore } from './store.js';
+import { SITE } from './site.js';
 
 export class Registry extends DurableObject {
   constructor(ctx, env) {
@@ -38,7 +39,20 @@ export default {
     if (!front) {
       front = createFront({
         registry: (body) => env.REGISTRY.get(env.REGISTRY.idFromName('main'), apac).call(body),
-        region: (name, body, who) => env.REGION.get(env.REGION.idFromName(name), apac).call(name, body, who)
+        region: (name, body, who) => env.REGION.get(env.REGION.idFromName(name), apac).call(name, body, who),
+        // 分壇行事曆的公開 getEvents（一整年）
+        fentan: async (year) => {
+          const url = SITE.fentanApi + '?' + new URLSearchParams({ action: 'getEvents', from: year + '-01-01', to: year + '-12-31' });
+          const ctrl = new AbortController();
+          const timer = setTimeout(() => ctrl.abort(), 8000);
+          try {
+            const body = await (await fetch(url, { signal: ctrl.signal })).json();
+            if (!body || !body.ok) throw new Error('分壇行事曆回錯誤');
+            return body.data.events;
+          } finally {
+            clearTimeout(timer);
+          }
+        }
       });
     }
     return front.handle(request);
