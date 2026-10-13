@@ -210,6 +210,11 @@ test('給分壇的 feed：只有開放的區（測試區不算），名單只有
   env.ok(await env.post({ action: 'superSaveRegion', token: sup, name: '教真區', status: '測試' }));
   f = env.ok(await env.get('action=feed&from=2026-10-13&to=2026-11-12'));
   assert.deepEqual(f.regions, []);
+  // test=1：連測試的區一起
+  f = env.ok(await env.get('action=feed&from=2026-10-13&to=2026-11-12&test=1'));
+  assert.deepEqual(f.regions.map((x) => x.region).sort(), ['教真區', '測試區'].sort());
   const r = await env.get('action=feed&from=2026-10-01&to=2026-12-31');
   assert.equal(r.error.code, 'BAD_REQUEST');
+  const bad = await env.post({ action: 'adminLogin', account: '不存在', password: 'x' });
+  assert.equal(bad.error.message, '沒有這個帳號');
 });

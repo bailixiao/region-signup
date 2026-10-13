@@ -67,6 +67,7 @@ export function createRegistryApp(store, opts) {
         ok = !!password && await sameSecret(password, pw);
         role = 'super';
       } else {
+        if (REGION_NAMES.indexOf(account) === -1) throw new AppError('UNAUTHORIZED', '沒有這個帳號');
         const acc = store.get('accounts', account);
         if (!acc) throw new AppError('UNAUTHORIZED', '這一區還沒有設定管理者密碼，請聯絡分壇');
         ok = !!password && (await pbkdf2(password, acc.salt)) === acc.hash;

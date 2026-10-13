@@ -82,7 +82,7 @@
 - POST `signup`（region、eventId、dates、positionId、names）、`mySignups`（region、name）、`cancel`（region、signupId）、`reschedule`（region、signupId、date、positionId）。
 
 給分壇行事曆讀（公開）：
-- `feed&from&to`：所有**開放**的區的活動、每天的狀態和名單（只有名字），最長 62 天；快取 2 分鐘。
+- `feed&from&to`：所有**開放**的區的活動、每天的狀態和名單（只有名字），最長 62 天；快取 2 分鐘。加 `test=1` 連「測試」狀態的區（含測試區）一起，給分壇行事曆測試連動用（分壇的報名統計頁網址加 `?test=1`）。
 
 管理：
 - POST `adminLogin`（account：「分壇總管理者」或區名、password）、`adminLogout`。

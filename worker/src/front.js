@@ -91,9 +91,10 @@ export function createFront(opts) {
     if (action === 'feed') {
       const from = p.get('from');
       const to = p.get('to');
+      const test = p.get('test') === '1'; // 測試用：連「測試」狀態的區（含測試區）一起
       checkRange(from, to, 62);
-      return cached(`feed:${from}:${to}`, ttl.feed, async () => {
-        const regions = await publicRegions();
+      return cached(`feed:${from}:${to}:${test ? 1 : 0}`, ttl.feed, async () => {
+        const regions = test ? await allRegions() : await publicRegions();
         const parts = await Promise.all(regions.map((r) => opts.region(r.name, { action: 'feed', from, to }, null).then(unwrap)));
         return { from, to, regions: parts };
       });
