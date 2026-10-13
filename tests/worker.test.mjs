@@ -93,6 +93,9 @@ test('開設區、登入：測試區家人看不到；區管理者只能管自�
   assert.equal(r.error.code, 'NOT_FOUND');
   r = await env.post({ action: 'superSaveRegion', token: sup, name: '台北區', password: 'abcdef' });
   assert.equal(r.error.code, 'BAD_REQUEST');
+  r = await env.post({ action: 'superSaveRegion', token: sup, name: '教全區', status: '開放', password: 'abcdef' });
+  assert.match(r.error.message, /用自己的行事曆/);
+  assert.deepEqual(env.ok(await env.post({ action: 'superRegions', token: sup })).ownSystem, ['教全區']);
   // 改密碼：舊的登入失效
   env.ok(await env.post({ action: 'superSaveRegion', token: sup, name: '測試區', password: 'new-pass' }));
   r = await env.post({ action: 'adminEvents', token: tok, region: '測試區' });

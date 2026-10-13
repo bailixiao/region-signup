@@ -12,5 +12,8 @@ export const SITE = {
   modes: ['報名型', '公告型']
 };
 
-/** 可以開設的區：16 區＋測試區 */
-export const REGION_NAMES = SITE.units.concat(SITE.testRegion);
+/** 用自己系統的區：在這裡不能開設（教全區用教全區行事曆，之後再搬過來） */
+export const OWN_SYSTEM = ['教全區'];
+
+/** 可以開設的區：16 區（教全區除外）＋測試區 */
+export const REGION_NAMES = SITE.units.filter((u) => OWN_SYSTEM.indexOf(u) === -1).concat(SITE.testRegion);

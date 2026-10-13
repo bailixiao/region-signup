@@ -117,7 +117,7 @@
     view.innerHTML = head('', 'regions') + `
       <h2 class="admin-sub">各區</h2>
       <p class="hint">開設一區要設定區管理者的密碼（至少 6 個字，請自己輸入、交給該區的管理者）。「開放」：家人看得到、分壇行事曆會讀；「測試」：隱藏，只有知道網址的人能打開。測試區永遠是測試。</p>
-      <ul class="admin-list">${data.names.map((name) => {
+      <ul class="admin-list">${(data.ownSystem || []).map((name) => `<li class="admin-row"><div class="admin-row-main"><strong>${Fmt.esc(name)}</strong><span class="card-meta">用自己的${Fmt.esc(name)}行事曆，不用在這裡開設（之後再搬過來）</span></div></li>`).join('')}${data.names.map((name) => {
         const r = byName.get(name);
         return `<li class="admin-row">
           <div class="admin-row-main"><strong>${Fmt.esc(name)}</strong>

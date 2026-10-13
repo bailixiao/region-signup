@@ -1,5 +1,5 @@
 // registry Durable Object：區清單、帳號（密碼只存加鹽雜湊）、登入通行碼、登入失敗次數（規格第 3、4 節）。
-import { SITE, REGION_NAMES } from './site.js';
+import { SITE, REGION_NAMES, OWN_SYSTEM } from './site.js';
 import { AppError, str, taipeiStamp } from './logic.js';
 
 const SESSION_TTL_MS = 12 * 3600e3;
@@ -95,12 +95,13 @@ export function createRegistryApp(store, opts) {
 
     async superRegions(body) {
       requireSuper(await verify(body.token));
-      return { regions: regionsAll().map((r) => Object.assign({}, r, { hasPassword: !!store.get('accounts', r.name) })), names: REGION_NAMES };
+      return { regions: regionsAll().map((r) => Object.assign({}, r, { hasPassword: !!store.get('accounts', r.name) })), names: REGION_NAMES, ownSystem: OWN_SYSTEM };
     },
 
     async superSaveRegion(body) {
       requireSuper(await verify(body.token));
       const name = str(body.name);
+      if (OWN_SYSTEM.indexOf(name) !== -1) throw new AppError('BAD_REQUEST', `${name}用自己的行事曆，不用在這裡開設`);
       if (REGION_NAMES.indexOf(name) === -1) throw new AppError('BAD_REQUEST', '區名不對');
       const status = name === SITE.testRegion ? '測試' : body.status === '開放' ? '開放' : '測試';
       const old = store.get('regions', name);
