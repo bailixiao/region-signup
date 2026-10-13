@@ -1,0 +1,13 @@
+node_modules/
+worker/node_modules/
+worker/.wrangler/
+.dev.vars
+*.log
+
+# 原始資料（可能有人名、電話）不放進公開的儲存庫
+imports/
+*.pdf
+*.xlsx
+*.xls
+*.xlsm
+*.docx

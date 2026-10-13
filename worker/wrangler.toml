@@ -1,0 +1,20 @@
+# Cloudflare Worker 設定。部署：cd worker，再 npx.cmd wrangler deploy
+# 分壇總管理者密碼：npx.cmd wrangler secret put SUPER_PASSWORD（由管理者自己輸入，不寫進程式碼）
+name = "region-signup-api"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+[[durable_objects.bindings]]
+name = "REGISTRY"
+class_name = "Registry"
+
+[[durable_objects.bindings]]
+name = "REGION"
+class_name = "RegionStore"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Registry", "RegionStore"]
+
+[observability]
+enabled = true

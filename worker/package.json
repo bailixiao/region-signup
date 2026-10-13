@@ -1,0 +1,5 @@
+{
+  "name": "region-signup-worker",
+  "private": true,
+  "type": "module"
+}
