@@ -33,7 +33,7 @@ function fail(err) {
  */
 export function createFront(opts) {
   const now = opts.now || (() => Date.now());
-  const ttl = Object.assign({ regions: 60e3, events: 30e3, feed: 120e3, verify: 60e3, fentan: 120e3 }, opts.ttl || {});
+  const ttl = Object.assign({ regions: 60e3, events: 30e3, feed: 60e3, verify: 60e3, fentan: 60e3 }, opts.ttl || {}); // 2026/10/13：feed、分壇的勤務改 1 分鐘
   const cache = new Map(); // key → { at, data }
 
   const unwrap = (res) => {
